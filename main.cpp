@@ -9,13 +9,29 @@ struct ethernet {
 };
 
 struct ip {
- unsigned char version;
+ unsigned char header_length:4;
+ unsigned char version:4;
  unsigned char service_field;
  unsigned short total_length;
 };
 
+struct tcp {
+	unsigned short src_port;
+	unsigned short dst_port;
+	unsigned int sequence_number;
+	unsigned int acknowledgement_number;
+	unsigned char a:1;
+	unsigned char b:3;
+	unsigned char tcp_length:4;
+	unsigned char data;
+	unsigned short window_size;
+	unsigned short checksum;
+	unsigned short urgent_pointer;
+
+};
+
 void print_ethernet(const unsigned char *data){
-	printf("Ethernet---------------------------------\n");
+	printf("\n---------------------------Ethernet---------------------------------\n");
   struct ethernet *ethernet;
   ethernet = (struct ethernet *)data;
   printf("src ip : ");
@@ -31,36 +47,35 @@ void print_ethernet(const unsigned char *data){
 	   printf("Type: IPv4 0x0800\n");
 }
 
-void print_ip(const unsigned char *data){
-	printf("IP------------------------------\n");
-	printf("%100x\n",*data);
-	printf("\n");
+int print_ip(const unsigned char *data){
+	printf("--------------------------------IP--------------------------------\n");
    	struct ip *ip;
 	ip = (struct ip *)data;
-	printf("version %02x service field %02x\n",ip->version,ip->service_field);
-	printf("total length: %d 0x:%04x\n",ntohs(ip->total_length),ip->total_length);
-	int len = (int)ntohs(ip->total_length);
+	
+	int len = ((int)ip->header_length*(int)ip->version);
+	printf("header length: %d bytes\n",len);
+	printf("total length : %d\n",(int)ntohs(ip->total_length));
 	data+=len-8;
 	const unsigned char *src_ip = (const unsigned char*)data;
 	data+=4;
 	const unsigned char *dst_ip = (const unsigned char*)data;
 	printf("src ip : %d.%d.%d.%d\n",src_ip[0],src_ip[1],src_ip[2],src_ip[3]);
+	printf("dst ip : %d.%d.%d.%d\n",dst_ip[0],dst_ip[1],dst_ip[2],dst_ip[3]);
+	data+=4;
+	return len;
 }
 
-void print_TCP(const unsigned char *data){
-	printf("TCP--------------------------------\n");
-	const unsigned short src_port = *(const unsigned short*)data;
-	data+=2;
-	const unsigned short dst_port = *(const unsigned short*)data;
-	data+=10;
-	const unsigned char length = *(const unsigned char*)data;
-	data+=length-12;
-	printf("src_port : %x\n",ntohs(src_port));
-	printf("dst_port: %x\n",ntohs(dst_port));
+int print_TCP(const unsigned char *data){
+	printf("--------------------------------TCP---------------------------------\n");
+	struct tcp *tcp;
+	tcp = (struct tcp*)data;
+	printf("src port : %d\n",ntohs(tcp->src_port),tcp->src_port);
+	printf("dst port : %d\n",ntohs(tcp->dst_port));
+	return (int)(tcp->tcp_length)*4;
 }
 
 void print_data(const unsigned char *data){
-	printf("DATA---------------------------------\n");
+	printf("----------------------------------DATA---------------------------------\n");
 	printf("%s\n",data);
 }
 
@@ -89,11 +104,15 @@ int main(int argc, char* argv[]) {
     int res = pcap_next_ex(handle, &header, &packet);
     if (res == 0) continue;
     if (res == -1 || res == -2) break;
+    printf("\n\n\n\n\n\n");
+    printf("------------------------------------------start------------------------------\n");
     printf("%u bytes captured\n", header->caplen);
 	print_ethernet(packet);
 	packet+=14;
-	print_ip(packet);
-	print_TCP(packet);
+	int len = print_ip(packet);
+	packet+=len;
+	len =print_TCP(packet);
+	packet+=len;
 	print_data(packet);;
   }
 
